@@ -1,7 +1,59 @@
-import fastify from 'fastify';
-const server = fastify();
+import Fastify from 'fastify';
+import { Keypair } from "@solana/web3.js";
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+const server = Fastify({ logger: true });
 server.get('/ping', async (request, reply) => {
     return 'pong\n';
+});
+// 🔐 Encrypt private key before storing
+function encryptPrivateKey(secretKey) {
+    const algorithm = "aes-256-cbc";
+    const key = crypto.scryptSync(process.env.ENCRYPTION_SECRET || "default_key", "salt", 32);
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(algorithm, key, iv);
+    const encrypted = Buffer.concat([cipher.update(secretKey.toString()), cipher.final()]);
+    return iv.toString("hex") + ":" + encrypted.toString("hex");
+}
+// 🔓 Decrypt private key when needed
+function decryptPrivateKey(encryptedData) {
+    const algorithm = "aes-256-cbc";
+    const key = crypto.scryptSync(process.env.ENCRYPTION_SECRET || "default_key", "salt", 32);
+    const [ivHex, encryptedText] = encryptedData.split(":");
+    const iv = Buffer.from(ivHex, "hex");
+    const decipher = crypto.createDecipheriv(algorithm, key, iv);
+    const decrypted = Buffer.concat([decipher.update(Buffer.from(encryptedText, "hex")), decipher.final()]);
+    return new Uint8Array(decrypted.toString().split(",").map(Number));
+}
+//Wallet creation route
+server.post("/wallet/create", async (request, reply) => {
+    try {
+        const keypair = Keypair.generate();
+        const walletAddress = keypair.publicKey.toBase58();
+        const encryptedPrivateKey = encryptPrivateKey(keypair.secretKey);
+        // Save encrypted key securely (e.g., database, file storage)
+        const filePath = path.join(__dirname, "wallets", `${walletAddress}.json`);
+        fs.writeFileSync(filePath, JSON.stringify({ publicKey: walletAddress, privateKey: encryptedPrivateKey }));
+        return reply.send({ walletAddress });
+    }
+    catch (error) {
+        return reply.status(500).send({ error: "Wallet creation failed" });
+    }
+});
+//To get wallet address
+server.get("/wallet/:address", async (request, reply) => {
+    try {
+        const { address } = request.params;
+        const filePath = path.join(__dirname, "wallets", `${address}.json`);
+        if (!fs.existsSync(filePath))
+            return reply.status(404).send({ error: "Wallet not found" });
+        const walletData = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        return reply.send({ publicKey: walletData.publicKey, encryptedPrivateKey: walletData.privateKey });
+    }
+    catch (error) {
+        return reply.status(500).send({ error: "Failed to retrieve wallet" });
+    }
 });
 server.listen({ port: 8080 }, (err, address) => {
     if (err) {

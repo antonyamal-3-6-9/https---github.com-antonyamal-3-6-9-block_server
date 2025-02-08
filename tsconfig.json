@@ -12,6 +12,6 @@
       "types": ["node"],
       "outDir": "dist"
     },
-    "include": ["src/**/*", "dist/**/*"],
+    "include": ["src/", "dist/**/*"],
     "exclude": ["node_modules"]
   }
