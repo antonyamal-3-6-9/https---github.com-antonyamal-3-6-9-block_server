@@ -4,6 +4,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 const server = Fastify({ logger: true });
+const __dirname = "/home/alastor/Intermediatery Layer/block_server/";
 server.get('/ping', async (request, reply) => {
     return 'pong\n';
 });
@@ -27,22 +28,24 @@ function decryptPrivateKey(encryptedData) {
     return new Uint8Array(decrypted.toString().split(",").map(Number));
 }
 //Wallet creation route
-server.post("/wallet/create", async (request, reply) => {
+server.get("/wallet/create", async (request, reply) => {
     try {
         const keypair = Keypair.generate();
         const walletAddress = keypair.publicKey.toBase58();
         const encryptedPrivateKey = encryptPrivateKey(keypair.secretKey);
+        console.log(walletAddress);
         // Save encrypted key securely (e.g., database, file storage)
         const filePath = path.join(__dirname, "wallets", `${walletAddress}.json`);
         fs.writeFileSync(filePath, JSON.stringify({ publicKey: walletAddress, privateKey: encryptedPrivateKey }));
         return reply.send({ walletAddress });
     }
     catch (error) {
-        return reply.status(500).send({ error: "Wallet creation failed" });
+        console.log(error);
+        return reply.status(500).send({ error: error });
     }
 });
 //To get wallet address
-server.get("/wallet/:address", async (request, reply) => {
+server.get("/wallet/get/:address", async (request, reply) => {
     try {
         const { address } = request.params;
         const filePath = path.join(__dirname, "wallets", `${address}.json`);
